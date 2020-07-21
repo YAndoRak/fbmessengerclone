@@ -1,43 +1,39 @@
 import random
-from flask import Flask, request
-from pymessenger.bot import Bot
 import requests
+import os
+from flask import Flask, request
+from fbmessenger import elements
+from pymessenger.bot import Bot
 from scrapping import scrape_google
-from fbmessenger import *
 
 app = Flask(__name__)
+app.debug = True
 ACCESS_TOKEN = 'EAAIiXXZBZBZAd8BAFIvOnSw5u7WIFkC5ZA7NSfCgSvziYhZBr3cUVlZBm4DZBiY4ZB0SYAT0ZBIXXJZCmBujX0OxZCiESbqZAw34xZC7KXT03DJZCpK0SxAi1nIJpN0AmU7LFd0rnNktcTW76XoqHxZAKPBV4ZCEEnRx5KYiFZC1hUSeINMSTKaZBYuNEil1P2'
 VERIFY_TOKEN = 'd8230120b243bf986a3f998a24db674c451160a6'
 bot = Bot(ACCESS_TOKEN)
-# elements =[{
-#             "type":"web_url",
-#             "url":"https://www.messenger.com",
-#             "title":"Visit Messenger"
-#           }]
+
+messenger = Messenger(os.environ.get(ACCESS_TOKEN))
 elements2 =[{
   "type":"phone_number",
   "title":"Jao's phone",
   "payload":"+261329125857"
     }]
 
-#We will receive messages that Facebook sends our bot at this endpoint 
-@app.route("/", methods=['GET', 'POST'])
-
-def receive_message():
+@app.route('/', methods=['GET', 'POST'])
+def webhook():
     if request.method == 'GET':
-        token_sent = request.args.get("hub.verify_token")
-        return verify_fb_token(token_sent)
-    else:
-       output = request.get_json()
-       for event in output['entry']:
+        if (request.args.get('hub.verify_token') == os.environ.get(VERIFY_TOKEN)):
+            return request.args.get('hub.challenge')
+        raise ValueError('FB_VERIFY_TOKEN does not match.')
+    elif request.method == 'POST':
+        messenger.handle(request.get_json(force=True))
+        for event in messenger['entry']:
           messaging = event['messaging']
-          print(messaging)
           for message in messaging:
             if message.get('message'):
                 recipient_id = message['sender']['id']
                 if message['message'].get('text'):
                     receive_message = message['message'].get('text').split()
-                    print(receive_message)
                     if (receive_message[0] == "search_google"):
                         if len(receive_message) < 2:
                             send_message(recipient_id, 'Veuillez réessayer la syntaxe exacte doit être search_google + mot_recherché')
@@ -52,7 +48,6 @@ def receive_message():
                 if message['message'].get('attachments'):
                     response_sent_nontext = get_message()
                     send_message(recipient_id, response_sent_nontext)
-
             if message.get('postback'):
                 recipient_id = message['sender']['id']
                 if message['postback'].get('payload'):
@@ -63,17 +58,10 @@ def receive_message():
                                 send_message(recipient_id, 'Veuillez réessayer la syntaxe exacte doit être PDF_view + lien_recherché')
                             else:
                                 response_query = ' '.join(map(str, receive_postback[1:]))
-                                fichier = attachments.File(url='http://25.io/toau/audio/sample.txt')
-                                messenger.send(fichier.to_dict(), 'RESPONSE')
+                                file = attachments.File(url='http://example.com/file.txt')
+								messenger.send(file.to_dict(), 'RESPONSE')
                                 send_message(recipient_id, 'ok, transcription to PDF {} en cours ....'.format(response_query))
-
     return "Message Processed"
-
-
-def verify_fb_token(token_sent):
-    if token_sent == VERIFY_TOKEN:
-        return request.args.get("hub.challenge")
-    return 'Invalid verification token'
 
 def get_message():
     sample_responses = ["You are stunning!", "We're proud of you.", "Keep on being you!", "We're greatful to know you :)"]
@@ -135,6 +123,7 @@ def send_generic_template(recipient_id, research_query):
 def send_BM(recipient_id, response_sent_text,element):
     bot.send_button_message(recipient_id, response_sent_text,element)
     return "success"
+
 
 if __name__ == "__main__":
     app.run()
